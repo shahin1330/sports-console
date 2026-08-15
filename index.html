@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sports Broadcast & VAR Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        .canvas-interactive { touch-action: none; }
+        @keyframes tvStamp {
+            0% { transform: scale(3.5); opacity: 0; filter: blur(10px); }
+            60% { transform: scale(0.92); opacity: 1; filter: blur(0); }
+            80% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-tv-stamp { animation: tvStamp 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes glowPulseRed {
+            0%, 100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 50px rgba(239, 68, 68, 0.8); }
+        }
+        .animate-glow-red { animation: glowPulseRed 1.5s infinite; }
+        @keyframes glowPulseGreen {
+            0%, 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 50px rgba(16, 185, 129, 0.8); }
+        }
+        .animate-glow-green { animation: glowPulseGreen 1.5s infinite; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans select-none pb-12">
+
+    <!-- Role Selection Banner -->
+    <div id="roleSelector" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-3xl max-w-md w-full text-center space-y-5 shadow-2xl">
+            <div class="w-16 h-16 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto text-3xl">
+                🎥
+            </div>
+            <div>
+                <h2 class="text-xl md:text-2xl font-black text-white">লাইভ স্পোর্টস কনসোল</h2>
+                <p class="text-xs text-slate-400 mt-1">ক্রিকেট DRS ও ফুটবল VAR মাল্টি-ক্যামেরা সিস্টেম</p>
+            </div>
+
+            <!-- Permission Error Banner -->
+            <div id="permissionNotice" class="hidden bg-amber-950/80 border border-amber-600/50 text-amber-300 p-3 rounded-xl text-xs text-left">
+                ⚠️ ক্যামেরা চালু করতে ব্রাউজারের পপ-আপ আসলে <strong>"Allow"</strong> নির্বাচন করুন।
+            </div>
+
+            <div class="space-y-3 pt-2">
+                <button onclick="initAsHost()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black py-3.5 rounded-xl transition shadow">
+                    🖥️ মাস্টার কন্ট্রোল রুম (ল্যাপটপ / বড় ডিসপ্লে)
+                </button>
+                
+                <div class="relative flex py-1 items-center">
+                    <div class="flex-grow border-t border-slate-800"></div>
+                    <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase font-bold">অথবা</span>
+                    <div class="flex-grow border-t border-slate-800"></div>
+                </div>
+
+                <div class="space-y-2">
+                    <input type="text" id="hostIdInput" placeholder="মাস্টার রুম কোড লিখুন" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-center text-amber-400 font-mono font-bold uppercase">
+                    <button onclick="initAsCameraNode()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl transition shadow">
+                        📱 ক্যামেরা হিসেবে যুক্ত হন (Wireless Camera)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header & Scoreboard -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-2.5 sticky top-0 z-40 shadow-2xl">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
+            
+            <div class="flex items-center gap-2">
+                <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button id="btnCricket" onclick="switchSport('cricket')" class="px-3 py-1 text-xs font-bold rounded-lg bg-amber-500 text-slate-950 transition">🏏 ক্রিকেট DRS</button>
+                    <button id="btnFootball" onclick="switchSport('football')" class="px-3 py-1 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition">⚽ ফুটবল VAR</button>
+                </div>
+                <span id="roomCodeBadge" class="text-xs font-mono bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-emerald-400 font-bold hidden">
+                    ROOM: --
+                </span>
+            </div>
+
+            <div id="scoreboardDisplay" class="flex items-center gap-3 bg-slate-950 px-4 py-1.5 rounded-xl border border-slate-800 shadow-inner"></div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="toggleScoreModal()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3.5 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold transition">
+                    ⚙️ স্কোর ও ম্যাচ এডিট
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <div class="lg:col-span-2 space-y-4">
+            
+            <!-- Master Video Screen -->
+            <div class="relative bg-black rounded-3xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center shadow-2xl">
+                <canvas id="mainCanvas" class="w-full h-full object-contain cursor-grab active:cursor-grabbing canvas-interactive"></canvas>
+
+                <div id="statusTag" class="absolute top-4 left-4 bg-slate-800/90 backdrop-blur text-slate-400 px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow">
+                    ক্যামেরার অপেক্ষায়...
+                </div>
+
+                <div id="activeAngleTag" class="absolute top-4 right-4 bg-slate-900/90 border border-slate-700 text-emerald-400 px-2.5 py-1 rounded text-xs font-mono font-bold">
+                    CAM 1
+                </div>
+
+                <!-- Animated TV Broadcast Overlay -->
+                <div id="tvDecisionOverlay" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center">
+                    <div id="suspenseContainer" class="space-y-4 flex flex-col items-center">
+                        <div class="relative w-20 h-20 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin flex items-center justify-center">
+                            <span class="text-xl">📡</span>
+                        </div>
+                        <div class="text-amber-400 font-black text-lg md:text-xl tracking-widest uppercase animate-pulse">
+                            DECISION PENDING...
+                        </div>
+                    </div>
+
+                    <div id="decisionCard" class="hidden p-6 md:p-10 rounded-3xl border-4 shadow-2xl max-w-lg w-full bg-slate-900 flex flex-col items-center transition-all">
+                        <span id="decisionSubTitle" class="text-xs uppercase font-black tracking-widest text-slate-400 mb-1">OFFICIAL VERDICT</span>
+                        <div id="decisionMainTitle" class="text-5xl md:text-7xl font-black tracking-wider py-3">OUT</div>
+                        <div id="decisionDetail" class="text-xs md:text-sm font-semibold text-slate-300 mt-2 bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800">Decision Overturned</div>
+                        <button onclick="dismissDecisionOverlay()" class="mt-6 bg-slate-800 hover:bg-slate-700 text-xs px-6 py-2.5 rounded-xl font-bold border border-slate-600 transition shadow">
+                            স্ক্রিন থেকে সরান ✕
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Multi-Camera Angle Deck -->
+            <div class="bg-slate-900 border border-slate-800 p-3 rounded-2xl space-y-2 shadow-lg">
+                <div class="flex justify-between items-center text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
+                    <span>📡 লাইভ ক্যামেরা সুইচিং ডেক:</span>
+                    <span id="connectedCount">সংযুক্ত ক্যামেরা: ০টি</span>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2" id="cameraAngleButtons">
+                    <button onclick="switchActiveCamera(0)" id="camBtn0" class="bg-slate-800 text-slate-400 font-bold py-2 rounded-xl text-xs border border-slate-700 opacity-50 cursor-not-allowed">📹 CAM 1 (অফলাইন)</button>
+                    <button onclick="switchActiveCamera(1)" id="camBtn1" class="bg-slate-800 text-slate-400 font-bold py-2 rounded-xl text-xs border border-slate-700 opacity-50 cursor-not-allowed">📹 CAM 2 (অফলাইন)</button>
+                    <button onclick="switchActiveCamera(2)" id="camBtn2" class="bg-slate-800 text-slate-400 font-bold py-2 rounded-xl text-xs border border-slate-700 opacity-50 cursor-not-allowed">📹 CAM 3 (অফলাইন)</button>
+                    <button onclick="switchActiveCamera(3)" id="camBtn3" class="bg-slate-800 text-slate-400 font-bold py-2 rounded-xl text-xs border border-slate-700 opacity-50 cursor-not-allowed">📹 CAM 4 (অফলাইন)</button>
+                    <button onclick="switchActiveCamera(4)" id="camBtn4" class="bg-slate-800 text-slate-400 font-bold py-2 rounded-xl text-xs border border-slate-700 opacity-50 cursor-not-allowed">📹 CAM 5 (অফলাইন)</button>
+                </div>
+            </div>
+
+            <!-- Replay Actions -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <button onclick="trigger20sReview()" class="bg-rose-600 hover:bg-rose-500 font-bold text-sm py-3 rounded-xl transition shadow animate-pulse">⏱️ ২০ সে. রিভিউ</button>
+                <button onclick="jumpBackSeconds(5)" class="bg-amber-600 hover:bg-amber-500 font-bold text-sm py-3 rounded-xl transition shadow">⏪ ৫ সে. পেছনে</button>
+                <button onclick="snapToLive()" class="bg-slate-800 hover:bg-slate-700 font-bold text-sm py-3 rounded-xl transition shadow text-slate-300">🔴 সরাসরি লাইভে যান</button>
+                <button onclick="clearLines()" class="bg-slate-800 hover:bg-slate-700 font-bold text-sm py-3 rounded-xl transition text-rose-400">🧹 লাইন মুছুন</button>
+            </div>
+
+            <!-- Scrubbing & Speed Deck -->
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-4 shadow-lg">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="stepFrame(-1)" class="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs">◀ -১ ফ্রেম</button>
+                        <button onclick="togglePlayPause()" id="playPauseBtn" class="bg-amber-500 text-slate-950 font-bold px-4 py-1.5 rounded-lg text-xs">Pause</button>
+                        <button onclick="stepFrame(1)" class="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs">+১ ফ্রেম ▶</button>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-slate-400 mr-1">গতি:</span>
+                        <button onclick="setSpeed(0.1)" class="speed-btn bg-slate-800 px-2.5 py-1 text-xs rounded hover:bg-slate-700">0.1x</button>
+                        <button onclick="setSpeed(0.25)" class="speed-btn bg-slate-800 px-2.5 py-1 text-xs rounded hover:bg-slate-700">0.25x</button>
+                        <button onclick="setSpeed(0.5)" class="speed-btn bg-amber-500 text-slate-950 font-bold px-2.5 py-1 text-xs rounded">0.5x</button>
+                        <button onclick="setSpeed(1.0)" class="speed-btn bg-slate-800 px-2.5 py-1 text-xs rounded hover:bg-slate-700">1.0x</button>
+                    </div>
+
+                    <button id="drawModeBtn" onclick="toggleDrawingMode()" class="bg-slate-800 text-xs px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-700">
+                        ✏️ লাইন: <span id="drawStatusText" class="text-rose-400 font-bold">বন্ধ</span>
+                    </button>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between text-[11px] text-slate-400">
+                        <span id="bufferStartLabel">বাফার (-২০ সে.)</span>
+                        <span id="currentSeekLabel" class="text-amber-400 font-bold">লাইভ</span>
+                        <span class="text-emerald-400 font-bold">চলমান লাইভ</span>
+                    </div>
+                    <input type="range" id="timelineSlider" min="0" max="0" value="0" step="1" class="w-full accent-amber-500 cursor-pointer" oninput="seekToFrame(this.value)">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Decisions Deck -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col justify-between space-y-6 shadow-lg">
+            
+            <!-- Cricket Section -->
+            <div id="cricketSection" class="space-y-4">
+                <h3 class="text-amber-400 font-bold text-base border-b border-slate-800 pb-2">🏏 ক্রিকেট DRS পর্যালোচনা</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Pitching (বল ড্রপ):</label>
+                        <select id="pitchVal" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm">
+                            <option value="inline">In Line (উইকেটের লাইনে)</option>
+                            <option value="outside_off">Outside Off (অফস্টাম্পের বাইরে)</option>
+                            <option value="outside_leg">Outside Leg (লেগস্টাম্পের বাইরে)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Impact (প্যাডে সংযোগ):</label>
+                        <select id="impactVal" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm">
+                            <option value="inline">In Line (লাইনের ভেতর)</option>
+                            <option value="outside">Outside (লাইনের বাইরে)</option>
+                            <option value="umpires_call">Umpire's Call</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Wicket Target (স্টাম্পে আঘাত):</label>
+                        <select id="wicketVal" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm">
+                            <option value="hitting">Hitting (স্টাম্পে লাগবে)</option>
+                            <option value="missing">Missing (বাইরে যাবে)</option>
+                            <option value="umpires_call">Umpire's Call</option>
+                        </select>
+                    </div>
+                </div>
+                <button onclick="evalCricketDecision()" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-xl transition shadow">
+                    📺 অ্যানিমেটেড DRS রায় ব্রডকাস্ট করুন
+                </button>
+            </div>
+
+            <!-- Football Section -->
+            <div id="footballSection" class="space-y-4 hidden">
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h3 class="text-emerald-400 font-bold text-sm">⏱️ ম্যাচ টাইমার</h3>
+                        <span id="timerRunningBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">থামানো আছে</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="text-3xl font-black font-mono text-white tracking-wider" id="panelTimerDisplay">00:00</div>
+                            <div id="panelExtraBadge" class="text-sm font-black font-mono text-amber-400 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded-lg hidden">+0'</div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button id="btnTimerToggle" onclick="toggleMatchTimer()" class="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs transition">▶️ চালু</button>
+                            <button onclick="resetMatchTimer()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl text-xs border border-slate-700">রিসেট</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5 pt-1">
+                        <button onclick="setExtraTime(0)" class="bg-slate-900 text-xs py-1.5 rounded-lg border border-slate-800 font-bold text-slate-400">০'</button>
+                        <button onclick="setExtraTime(2)" class="bg-slate-900 text-xs py-1.5 rounded-lg border border-slate-800 font-bold text-amber-400">+২'</button>
+                        <button onclick="setExtraTime(3)" class="bg-slate-900 text-xs py-1.5 rounded-lg border border-slate-800 font-bold text-amber-400">+৩'</button>
+                        <button onclick="setExtraTime(5)" class="bg-slate-900 text-xs py-1.5 rounded-lg border border-slate-800 font-bold text-amber-400">+৫'</button>
+                    </div>
+                </div>
+
+                <div class="space-y-2.5">
+                    <h3 class="text-emerald-400 font-bold text-sm border-b border-slate-800 pb-1">📺 অফিশিয়াল VAR রায়</h3>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button onclick="triggerAnimatedVerdict('GOAL', 'border-emerald-500 text-emerald-400 animate-glow-green', 'Goal Confirmed - Valid Play')" class="bg-slate-950 border border-emerald-500/40 text-emerald-400 py-3 rounded-xl font-bold text-sm hover:bg-emerald-500 hover:text-slate-950 transition">⚽ GOAL</button>
+                        <button onclick="triggerAnimatedVerdict('OFFSIDE', 'border-rose-600 text-rose-500 animate-glow-red', 'Decision Overturned - Offside')" class="bg-slate-950 border border-rose-500/40 text-rose-500 py-3 rounded-xl font-bold text-sm hover:bg-rose-500 hover:text-white transition">🚩 OFFSIDE</button>
+                        <button onclick="triggerAnimatedVerdict('PENALTY', 'border-amber-500 text-amber-400', 'Penalty Awarded - Inside Box Foul')" class="bg-slate-950 border border-amber-500/40 text-amber-400 py-3 rounded-xl font-bold text-sm hover:bg-amber-500 hover:text-slate-950 transition">⚠️ PENALTY</button>
+                        <button onclick="triggerAnimatedVerdict('RED CARD', 'border-red-600 text-red-500 animate-glow-red', 'Direct Red Card - Serious Foul')" class="bg-slate-950 border border-red-500/40 text-red-500 py-3 rounded-xl font-bold text-sm hover:bg-red-600 hover:text-white transition">🟥 RED CARD</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Score -->
+            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">দ্রুত স্কোর পরিবর্তন</span>
+                <div id="quickScoreControls" class="flex flex-wrap gap-1.5"></div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Modal for Score & Config -->
+    <div id="scoreModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white">⚙️ কাস্টমাইজ স্কোর ও ম্যাচ তথ্য</h3>
+                <button onclick="toggleScoreModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">দল ১ এর নাম:</label>
+                    <input type="text" id="inputTeamA" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-emerald-400 font-bold">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">দল ২ এর নাম:</label>
+                    <input type="text" id="inputTeamB" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-300 font-bold">
+                </div>
+            </div>
+
+            <div id="cricketEditFields" class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">রান:</label>
+                    <input type="number" id="inputRuns" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-sm">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">উইকেট:</label>
+                    <input type="number" id="inputWickets" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-sm">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">ওভার:</label>
+                    <input type="text" id="inputOvers" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-sm">
+                </div>
+            </div>
+
+            <div id="footballEditFields" class="space-y-3 hidden">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">দল ১ গোল:</label>
+                        <input type="number" id="inputGoalA" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">দল ২ গোল:</label>
+                        <input type="number" id="inputGoalB" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-sm">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button onclick="toggleScoreModal()" class="px-4 py-2 bg-slate-800 rounded-xl text-xs font-semibold">বাতিল</button>
+                <button onclick="saveScoreData()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold text-white">সংরক্ষণ করুন</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Video Containers for Cameras -->
+    <video id="remoteCam0" autoplay playsinline muted class="hidden"></video>
+    <video id="remoteCam1" autoplay playsinline muted class="hidden"></video>
+    <video id="remoteCam2" autoplay playsinline muted class="hidden"></video>
+    <video id="remoteCam3" autoplay playsinline muted class="hidden"></video>
+    <video id="remoteCam4" autoplay playsinline muted class="hidden"></video>
+
+    <script>
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function playBeep(freq, type, duration) {
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        // Camera helper with robust fallback
+        async function getDeviceCameraStream() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("ব্রাউজারে ক্যামেরা পারমিশন সক্রিয় নেই!");
+            }
+            try {
+                return await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+            } catch (e1) {
+                return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            }
+        }
+
+        const mainCanvas = document.getElementById('mainCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const currentSeekLabel = document.getElementById('currentSeekLabel');
+        const bufferStartLabel = document.getElementById('bufferStartLabel');
+        const statusTag = document.getElementById('statusTag');
+        const tvOverlay = document.getElementById('tvDecisionOverlay');
+        const roleSelector = document.getElementById('roleSelector');
+
+        let peer = null;
+        let isHost = false;
+        let roomCode = "MATCH" + Math.floor(100 + Math.random() * 900);
+
+        const MAX_CAMS = 5;
+        let cameraStreams = [null, null, null, null, null];
+        let activeCamIndex = 0;
+
+        let isLiveActive = false;
+        let isReviewing = false;
+        let isPlaying = true;
+        let currentSport = 'cricket';
+
+        const FPS = 30;
+        const BUFFER_SECONDS = 20;
+        const MAX_FRAMES = BUFFER_SECONDS * FPS;
+        let frameBuffer = [];
+        let viewIndex = 0;
+        let playSpeed = 0.5;
+        let replayLoopTimer = null;
+        let captureTimer = null;
+
+        let isDrawMode = false;
+        let lines = [];
+        let activeLine = null;
+
+        let scoreState = {
+            teamA: "BAN",
+            teamB: "IND",
+            runs: 168,
+            wickets: 4,
+            overs: "18.2",
+            goalA: 2,
+            goalB: 1
+        };
+
+        let matchSeconds = 0;
+        let extraMinutes = 0;
+        let isTimerRunning = false;
+        let matchTimerInterval = null;
+
+        // Master Control Room Init (No camera required on Host)
+        async function initAsHost() {
+            getAudioContext();
+            roleSelector.classList.add('hidden');
+            isHost = true;
+
+            document.getElementById('roomCodeBadge').classList.remove('hidden');
+            document.getElementById('roomCodeBadge').innerText = `ROOM: ${roomCode}`;
+
+            mainCanvas.width = 1280;
+            mainCanvas.height = 720;
+            mainCtx.fillStyle = "#0f172a";
+            mainCtx.fillRect(0, 0, 1280, 720);
+            mainCtx.fillStyle = "#94a3b8";
+            mainCtx.font = "bold 24px sans-serif";
+            mainCtx.textAlign = "center";
+            mainCtx.fillText("ক্যামেরা যুক্ত হওয়ার অপেক্ষায়...", 640, 360);
+
+            // Setup PeerJS for Multi-Camera Connection
+            peer = new Peer(roomCode);
+            peer.on('call', (call) => {
+                call.answer();
+                call.on('stream', (remoteStream) => {
+                    let slot = cameraStreams.findIndex((s) => s === null);
+                    if (slot !== -1) {
+                        attachCameraStream(slot, remoteStream);
+                    }
+                });
+            });
+
+            if (!captureTimer) captureTimer = setInterval(captureFrames, 1000 / FPS);
+        }
+
+        // Camera Node Init (Triggered from phone)
+        async function initAsCameraNode() {
+            const targetRoom = document.getElementById('hostIdInput').value.trim().toUpperCase();
+            if (!targetRoom) {
+                alert("দয়া করে মাস্টার রুমের কোড লিখুন!");
+                return;
+            }
+
+            document.getElementById('permissionNotice').classList.remove('hidden');
+
+            try {
+                const localStream = await getDeviceCameraStream();
+                roleSelector.classList.add('hidden');
+
+                peer = new Peer();
+                peer.on('open', () => {
+                    peer.call(targetRoom, localStream);
+                    document.body.innerHTML = `
+                        <div class="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-4">
+                            <div class="w-16 h-16 bg-emerald-500/20 border-2 border-emerald-500 rounded-full flex items-center justify-center animate-ping">
+                                📹
+                            </div>
+                            <h2 class="text-xl font-bold text-white">ক্যামেরা সফলভাবে সংযুক্ত হয়েছে!</h2>
+                            <p class="text-xs text-slate-400">এই ডিভাইসের ভিডিও সরাসরি মাস্টার কনসোলে পাঠানো হচ্ছে।</p>
+                            <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-emerald-400 font-bold">CONNECTED ROOM: ${targetRoom}</span>
+                        </div>
+                    `;
+                });
+
+                peer.on('error', (err) => {
+                    alert("মাস্টার কনসোলে কানেক্ট করা যায়নি! রুম কোড সঠিক কিনা চেক করুন।");
+                    location.reload();
+                });
+
+            } catch (err) {
+                alert("ক্যামেরা ওপেন করা যায়নি! ব্রাউজারের সাইট সেটিংসে গিয়ে ক্যামেরা Allow করুন।");
+            }
+        }
+
+        // Attach Camera Stream to Deck
+        function attachCameraStream(index, stream) {
+            cameraStreams[index] = stream;
+            const videoEl = document.getElementById(`remoteCam${index}`);
+            videoEl.srcObject = stream;
+            videoEl.onloadedmetadata = () => {
+                videoEl.play();
+                if (index === activeCamIndex) {
+                    mainCanvas.width = videoEl.videoWidth || 1280;
+                    mainCanvas.height = videoEl.videoHeight || 720;
+                    isLiveActive = true;
+                    statusTag.innerText = "LIVE";
+                    statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
+                    requestAnimationFrame(renderLoop);
+                }
+            };
+
+            const btn = document.getElementById(`camBtn${index}`);
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerText = `📹 CAM ${index + 1} (লাইভ)`;
+            if (index === activeCamIndex) {
+                btn.className = "bg-emerald-600 text-slate-950 font-black py-2 rounded-xl text-xs border border-emerald-400";
+            }
+            updateConnectedCount();
+        }
+
+        function updateConnectedCount() {
+            const activeCount = cameraStreams.filter(s => s !== null).length;
+            document.getElementById('connectedCount').innerText = `সংযুক্ত ক্যামেরা: ${activeCount}টি`;
+        }
+
+        // Angle Switcher
+        function switchActiveCamera(index) {
+            if (!cameraStreams[index]) return;
+
+            activeCamIndex = index;
+            document.getElementById('activeAngleTag').innerText = `CAM ${index + 1}`;
+
+            for (let i = 0; i < MAX_CAMS; i++) {
+                const btn = document.getElementById(`camBtn${i}`);
+                if (i === index) {
+                    btn.className = "bg-emerald-600 text-slate-950 font-black py-2 rounded-xl text-xs border border-emerald-400";
+                } else if (cameraStreams[i]) {
+                    btn.className = "bg-slate-800 text-slate-200 font-bold py-2 rounded-xl text-xs border border-slate-700 hover:bg-slate-700";
+                }
+            }
+
+            frameBuffer = [];
+            clearLines();
+            isLiveActive = true;
+            statusTag.innerText = "LIVE";
+            statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
+        }
+
+        // Memory Buffer & Rendering Loop
+        function captureFrames() {
+            const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
+            if (!activeVideo || activeVideo.paused || activeVideo.ended || activeVideo.videoWidth === 0) return;
+
+            createImageBitmap(activeVideo).then(bmp => {
+                frameBuffer.push(bmp);
+                if (frameBuffer.length > MAX_FRAMES) {
+                    const old = frameBuffer.shift();
+                    old.close();
+                }
+
+                timelineSlider.max = frameBuffer.length - 1;
+                bufferStartLabel.innerText = `বাফার (-${(frameBuffer.length / FPS).toFixed(0)} সে.)`;
+
+                if (!isReviewing) {
+                    viewIndex = frameBuffer.length - 1;
+                    timelineSlider.value = viewIndex;
+                }
+            }).catch(() => {});
+        }
+
+        function renderLoop() {
+            const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
+            if (!isReviewing) {
+                if (activeVideo && activeVideo.videoWidth > 0) {
+                    mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                    mainCtx.drawImage(activeVideo, 0, 0, mainCanvas.width, mainCanvas.height);
+                    renderLines();
+                }
+            } else {
+                if (frameBuffer[viewIndex]) {
+                    mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                    mainCtx.drawImage(frameBuffer[viewIndex], 0, 0, mainCanvas.width, mainCanvas.height);
+                    renderLines();
+                }
+            }
+            if (isLiveActive) {
+                requestAnimationFrame(renderLoop);
+            }
+        }
+
+        // 20s Instant Replay
+        function trigger20sReview() {
+            if (frameBuffer.length < 20) {
+                alert("ক্যামেরা অন করে কয়েক সেকেন্ড অপেক্ষা করুন যাতে বাফারে ফুটেজ জমা হয়।");
+                return;
+            }
+
+            isReviewing = true;
+            isPlaying = true;
+            document.getElementById('playPauseBtn').innerText = 'Pause';
+
+            statusTag.innerText = "২০ সে. ইনস্ট্যান্ট রিভিউ";
+            statusTag.className = "absolute top-4 left-4 bg-rose-600 text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow animate-pulse";
+
+            viewIndex = 0;
+            timelineSlider.value = viewIndex;
+            updateTimeLabel();
+            startPlaybackEngine();
+        }
+
+        function jumpBackSeconds(sec) {
+            if (frameBuffer.length < 15) return;
+            const target = Math.max(0, frameBuffer.length - 1 - (sec * FPS));
+            isReviewing = true;
+            isPlaying = true;
+            viewIndex = target;
+            timelineSlider.value = viewIndex;
+            updateTimeLabel();
+            startPlaybackEngine();
+        }
+
+        function startPlaybackEngine() {
+            clearInterval(replayLoopTimer);
+            replayLoopTimer = setInterval(() => {
+                if (!isPlaying || !isReviewing) return;
+
+                viewIndex++;
+                if (viewIndex >= frameBuffer.length) {
+                    viewIndex = Math.max(0, frameBuffer.length - 1 - (5 * FPS));
+                }
+                timelineSlider.value = viewIndex;
+                updateTimeLabel();
+            }, 1000 / (FPS * playSpeed));
+        }
+
+        function snapToLive() {
+            isReviewing = false;
+            isPlaying = false;
+            clearInterval(replayLoopTimer);
+            clearLines();
+
+            statusTag.innerText = "LIVE";
+            statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
+            currentSeekLabel.innerText = "লাইভ";
+        }
+
+        function seekToFrame(val) {
+            isReviewing = true;
+            isPlaying = false;
+            document.getElementById('playPauseBtn').innerText = 'Play';
+            viewIndex = parseInt(val);
+            updateTimeLabel();
+        }
+
+        function updateTimeLabel() {
+            const framesBehind = (frameBuffer.length - 1) - viewIndex;
+            const secBehind = (framesBehind / FPS).toFixed(1);
+            if (framesBehind <= 2) {
+                currentSeekLabel.innerText = "লাইভ";
+            } else {
+                currentSeekLabel.innerText = `-${secBehind} সে. আগে`;
+            }
+        }
+
+        function stepFrame(step) {
+            isReviewing = true;
+            isPlaying = false;
+            document.getElementById('playPauseBtn').innerText = 'Play';
+            viewIndex = Math.max(0, Math.min(frameBuffer.length - 1, viewIndex + step));
+            timelineSlider.value = viewIndex;
+            updateTimeLabel();
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            document.getElementById('playPauseBtn').innerText = isPlaying ? 'Pause' : 'Play';
+            if (isPlaying && isReviewing) startPlaybackEngine();
+        }
+
+        function setSpeed(speed) {
+            playSpeed = speed;
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.className = 'speed-btn bg-slate-800 px-2.5 py-1 text-xs rounded hover:bg-slate-700';
+                if (btn.innerText.includes(`${speed}x`)) {
+                    btn.className = 'speed-btn bg-amber-500 text-slate-950 font-bold px-2.5 py-1 text-xs rounded';
+                }
+            });
+            if (isReviewing && isPlaying) startPlaybackEngine();
+        }
+
+        // Coordinates & Drawing
+        function getCoords(e) {
+            const rect = mainCanvas.getBoundingClientRect();
+            const scaleX = mainCanvas.width / rect.width;
+            const scaleY = mainCanvas.height / rect.height;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        }
+
+        mainCanvas.addEventListener('mousedown', (e) => {
+            if (!isDrawMode) return;
+            const p = getCoords(e);
+            activeLine = { x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: currentSport === 'football' ? '#ef4444' : '#f59e0b' };
+        });
+
+        mainCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawMode || !activeLine) return;
+            const p = getCoords(e);
+            activeLine.x2 = p.x;
+            activeLine.y2 = p.y;
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (activeLine) { lines.push(activeLine); activeLine = null; }
+        });
+
+        mainCanvas.addEventListener('touchstart', (e) => {
+            if (!isDrawMode) return;
+            const p = getCoords(e);
+            activeLine = { x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: currentSport === 'football' ? '#ef4444' : '#f59e0b' };
+        }, { passive: false });
+
+        mainCanvas.addEventListener('touchmove', (e) => {
+            if (!isDrawMode || !activeLine) return;
+            const p = getCoords(e);
+            activeLine.x2 = p.x;
+            activeLine.y2 = p.y;
+        }, { passive: false });
+
+        mainCanvas.addEventListener('touchend', () => {
+            if (activeLine) { lines.push(activeLine); activeLine = null; }
+        });
+
+        function toggleDrawingMode() {
+            isDrawMode = !isDrawMode;
+            document.getElementById('drawStatusText').innerText = isDrawMode ? 'চালু' : 'বন্ধ';
+            document.getElementById('drawStatusText').className = isDrawMode ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+        }
+
+        function renderLines() {
+            mainCtx.lineWidth = 3;
+            mainCtx.setLineDash([6, 3]);
+
+            lines.forEach(l => {
+                mainCtx.strokeStyle = l.color;
+                mainCtx.beginPath();
+                mainCtx.moveTo(l.x1, l.y1);
+                mainCtx.lineTo(l.x2, l.y2);
+                mainCtx.stroke();
+            });
+
+            if (activeLine) {
+                mainCtx.strokeStyle = activeLine.color;
+                mainCtx.beginPath();
+                mainCtx.moveTo(activeLine.x1, activeLine.y1);
+                mainCtx.lineTo(activeLine.x2, activeLine.y2);
+                mainCtx.stroke();
+            }
+            mainCtx.setLineDash([]);
+        }
+
+        function clearLines() { lines = []; activeLine = null; }
+
+        // TV Overlay Engine
+        function triggerAnimatedVerdict(title, styleClass, detailText) {
+            const suspense = document.getElementById('suspenseContainer');
+            const card = document.getElementById('decisionCard');
+            const mainTitle = document.getElementById('decisionMainTitle');
+            const subTitle = document.getElementById('decisionSubTitle');
+            const detail = document.getElementById('decisionDetail');
+
+            tvOverlay.classList.remove('hidden');
+            suspense.classList.remove('hidden');
+            card.classList.add('hidden');
+
+            playBeep(440, 'sine', 0.2);
+            setTimeout(() => playBeep(554, 'sine', 0.2), 300);
+            setTimeout(() => playBeep(659, 'sine', 0.3), 600);
+
+            setTimeout(() => {
+                suspense.classList.add('hidden');
+                card.classList.remove('hidden');
+                
+                subTitle.innerText = currentSport === 'cricket' ? "THIRD UMPIRE DRS VERDICT" : "VAR OFFICIAL DECISION";
+                mainTitle.innerText = title;
+                mainTitle.className = `text-5xl md:text-7xl font-black tracking-wider py-3 ${styleClass.includes('text-') ? styleClass.split(' ')[1] : 'text-white'}`;
+                card.className = `animate-tv-stamp p-6 md:p-10 rounded-3xl border-4 shadow-2xl max-w-lg w-full bg-slate-900 flex flex-col items-center ${styleClass.split(' ')[0]} ${styleClass.includes('animate-glow') ? styleClass.split(' ').pop() : ''}`;
+                detail.innerText = detailText;
+
+                playBeep(180, 'triangle', 0.6);
+            }, 1200);
+        }
+
+        function dismissDecisionOverlay() {
+            tvOverlay.classList.add('hidden');
+        }
+
+        function evalCricketDecision() {
+            const p = document.getElementById('pitchVal').value;
+            const i = document.getElementById('impactVal').value;
+            const w = document.getElementById('wicketVal').value;
+
+            if (p === 'outside_leg') {
+                triggerAnimatedVerdict('NOT OUT', 'border-emerald-500 text-emerald-400 animate-glow-green', 'Pitching Outside Leg Stump');
+            } else if (i === 'outside') {
+                triggerAnimatedVerdict('NOT OUT', 'border-emerald-500 text-emerald-400 animate-glow-green', 'Impact Outside Off/Leg Stump');
+            } else if (w === 'missing') {
+                triggerAnimatedVerdict('NOT OUT', 'border-emerald-500 text-emerald-400 animate-glow-green', 'Wickets Missing Stumps');
+            } else if (p === 'inline' && i === 'inline' && w === 'hitting') {
+                triggerAnimatedVerdict('OUT', 'border-rose-600 text-rose-500 animate-glow-red', 'Pitching In Line | Impact In Line | Wickets Hitting');
+            } else {
+                triggerAnimatedVerdict("UMPIRE'S CALL", 'border-amber-500 text-amber-400', 'Marginal Decision - On-Field Call Stands');
+            }
+        }
+
+        // Match Clock & Scoreboard
+        function formatTimer(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function toggleMatchTimer() {
+            isTimerRunning = !isTimerRunning;
+            const btn = document.getElementById('btnTimerToggle');
+            const badge = document.getElementById('timerRunningBadge');
+
+            if (isTimerRunning) {
+                btn.innerText = "⏸️ পজ";
+                badge.innerText = "লাইভ চলছে";
+                badge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse";
+                clearInterval(matchTimerInterval);
+                matchTimerInterval = setInterval(() => {
+                    matchSeconds++;
+                    updateTimerDisplays();
+                }, 1000);
+            } else {
+                btn.innerText = "▶️ চালু";
+                badge.innerText = "থামানো আছে";
+                badge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400";
+                clearInterval(matchTimerInterval);
+            }
+        }
+
+        function resetMatchTimer() {
+            matchSeconds = 0;
+            extraMinutes = 0;
+            updateTimerDisplays();
+        }
+
+        function setExtraTime(min) {
+            extraMinutes = min;
+            updateTimerDisplays();
+        }
+
+        function updateTimerDisplays() {
+            const str = formatTimer(matchSeconds);
+            document.getElementById('panelTimerDisplay').innerText = str;
+            const panelExtraBadge = document.getElementById('panelExtraBadge');
+            if (extraMinutes > 0) {
+                panelExtraBadge.innerText = `+${extraMinutes}'`;
+                panelExtraBadge.classList.remove('hidden');
+            } else {
+                panelExtraBadge.classList.add('hidden');
+            }
+            renderScoreboard();
+        }
+
+        function renderScoreboard() {
+            const sc = document.getElementById('scoreboardDisplay');
+            const qc = document.getElementById('quickScoreControls');
+
+            if (currentSport === 'cricket') {
+                sc.innerHTML = `
+                    <span class="font-bold text-amber-400 text-xs md:text-sm tracking-wide">${scoreState.teamA}</span>
+                    <span class="text-base md:text-lg font-black text-white px-2.5 py-0.5 bg-slate-900 rounded border border-slate-800">${scoreState.runs}/${scoreState.wickets}</span>
+                    <span class="text-xs text-slate-400 font-mono">(${scoreState.overs} Ov)</span>
+                    <span class="text-xs text-slate-600 font-bold">vs</span>
+                    <span class="font-bold text-slate-300 text-xs md:text-sm tracking-wide">${scoreState.teamB}</span>
+                `;
+                qc.innerHTML = `
+                    <button onclick="updateCricketScore(1, 0)" class="bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700">+১ রান</button>
+                    <button onclick="updateCricketScore(4, 0)" class="bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700 text-amber-400">+৪ (বাউন্ডারি)</button>
+                    <button onclick="updateCricketScore(6, 0)" class="bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700 text-emerald-400">+৬ (ছক্কা)</button>
+                    <button onclick="updateCricketScore(0, 1)" class="bg-rose-950/40 hover:bg-rose-900/60 px-3 py-1.5 rounded-lg text-xs font-bold border border-rose-700 text-rose-400">+W (আউট)</button>
+                `;
+            } else {
+                sc.innerHTML = `
+                    <span class="font-bold text-emerald-400 text-xs md:text-sm tracking-wide">${scoreState.teamA}</span>
+                    <span class="text-base md:text-lg font-black text-white px-2.5 py-0.5 bg-slate-900 rounded border border-slate-800">${scoreState.goalA} - ${scoreState.goalB}</span>
+                    <span class="font-bold text-slate-300 text-xs md:text-sm tracking-wide">${scoreState.teamB}</span>
+                    
+                    <div class="flex items-center gap-1.5 ml-2 pl-2 border-l border-slate-800">
+                        <span class="w-2 h-2 rounded-full ${isTimerRunning ? 'bg-emerald-500 animate-ping' : 'bg-slate-600'}"></span>
+                        <span class="text-xs md:text-sm font-black font-mono text-amber-400 tracking-wider">${formatTimer(matchSeconds)}</span>
+                        ${extraMinutes > 0 ? `<span class="text-xs font-black font-mono text-amber-400 bg-amber-950/80 border border-amber-500/40 px-1.5 py-0.5 rounded shadow animate-pulse">+${extraMinutes}'</span>` : ''}
+                    </div>
+                `;
+                qc.innerHTML = `
+                    <button onclick="updateFootballScore('A', 1)" class="flex-1 bg-slate-900 hover:bg-slate-800 py-2 rounded-lg text-xs font-bold border border-slate-700 text-emerald-400">+১ গোল (${scoreState.teamA})</button>
+                    <button onclick="updateFootballScore('B', 1)" class="flex-1 bg-slate-900 hover:bg-slate-800 py-2 rounded-lg text-xs font-bold border border-slate-700 text-slate-300">+১ গোল (${scoreState.teamB})</button>
+                `;
+            }
+        }
+
+        function updateCricketScore(r, w) {
+            scoreState.runs += r;
+            scoreState.wickets += w;
+            renderScoreboard();
+        }
+
+        function updateFootballScore(team, val) {
+            if (team === 'A') scoreState.goalA = Math.max(0, scoreState.goalA + val);
+            else scoreState.goalB = Math.max(0, scoreState.goalB + val);
+            renderScoreboard();
+        }
+
+        function switchSport(sport) {
+            currentSport = sport;
+            clearLines();
+            dismissDecisionOverlay();
+
+            document.getElementById('btnCricket').className = sport === 'cricket' ? 'px-3 py-1 text-xs font-bold rounded-lg bg-amber-500 text-slate-950 transition' : 'px-3 py-1 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition';
+            document.getElementById('btnFootball').className = sport === 'football' ? 'px-3 py-1 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 transition' : 'px-3 py-1 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition';
+
+            document.getElementById('cricketSection').classList.toggle('hidden', sport !== 'cricket');
+            document.getElementById('footballSection').classList.toggle('hidden', sport !== 'football');
+            document.getElementById('cricketEditFields').classList.toggle('hidden', sport !== 'cricket');
+            document.getElementById('footballEditFields').classList.toggle('hidden', sport !== 'football');
+
+            renderScoreboard();
+        }
+
+        function toggleScoreModal() {
+            const m = document.getElementById('scoreModal');
+            m.classList.toggle('hidden');
+            if (!m.classList.contains('hidden')) {
+                document.getElementById('inputTeamA').value = scoreState.teamA;
+                document.getElementById('inputTeamB').value = scoreState.teamB;
+                document.getElementById('inputRuns').value = scoreState.runs;
+                document.getElementById('inputWickets').value = scoreState.wickets;
+                document.getElementById('inputOvers').value = scoreState.overs;
+                document.getElementById('inputGoalA').value = scoreState.goalA;
+                document.getElementById('inputGoalB').value = scoreState.goalB;
+            }
+        }
+
+        function saveScoreData() {
+            scoreState.teamA = document.getElementById('inputTeamA').value.trim() || scoreState.teamA;
+            scoreState.teamB = document.getElementById('inputTeamB').value.trim() || scoreState.teamB;
+            scoreState.runs = parseInt(document.getElementById('inputRuns').value) || 0;
+            scoreState.wickets = parseInt(document.getElementById('inputWickets').value) || 0;
+            scoreState.overs = document.getElementById('inputOvers').value.trim() || "0.0";
+            scoreState.goalA = parseInt(document.getElementById('inputGoalA').value) || 0;
+            scoreState.goalB = parseInt(document.getElementById('inputGoalB').value) || 0;
+
+            renderScoreboard();
+            toggleScoreModal();
+        }
+
+        renderScoreboard();
+    </script>
+</body>
+</html>
