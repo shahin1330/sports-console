@@ -135,7 +135,6 @@
 
             <!-- View Mode Deck & Drive Recording Deck -->
             <div class="bg-slate-900 border border-slate-800 p-3 rounded-2xl flex flex-wrap justify-between items-center gap-3 shadow-lg">
-                <!-- Display Mode Switcher -->
                 <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
                     <button id="btnViewSingle" onclick="setViewMode('single')" class="bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition">
                         📹 ফোকাস ভিউ (সিঙ্গেল)
@@ -145,7 +144,6 @@
                     </button>
                 </div>
 
-                <!-- Google Drive Video Recorder -->
                 <div class="flex items-center gap-2">
                     <button id="btnRecordToggle" onclick="toggleDriveRecording()" class="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-1.5 rounded-xl text-xs transition shadow flex items-center gap-1.5">
                         <span class="w-2 h-2 bg-white rounded-full"></span>
@@ -306,7 +304,7 @@
 
             <!-- Drive API Endpoint Input -->
             <div class="space-y-1 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <label class="text-xs text-amber-400 font-bold block">Google Apps Script Web App URL (ভিডিও ড্রাইভে রাখার লিংক):</label>
+                <label class="text-xs text-amber-400 font-bold block">Google Apps Script Web App URL:</label>
                 <input type="text" id="inputDriveApiUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-mono text-slate-200">
             </div>
 
@@ -417,7 +415,7 @@
         const MAX_CAMS = 5;
         let cameraStreams = [null, null, null, null, null];
         let activeCamIndex = 0;
-        let currentViewMode = 'single'; // 'single' অথবা 'grid'
+        let currentViewMode = 'single';
 
         let isLiveActive = false;
         let isReviewing = false;
@@ -437,10 +435,8 @@
         let lines = [];
         let activeLine = null;
 
-        // Drive Web App API URL (সংরক্ষণ করে রাখবে)
         let driveApiUrl = localStorage.getItem('drive_api_url') || "";
 
-        // Recording Engine State
         let mediaRecorder = null;
         let recordedChunks = [];
         let isRecording = false;
@@ -527,7 +523,7 @@
 
                             <div class="relative z-10 bg-slate-950/80 backdrop-blur-md p-3.5 rounded-2xl border border-slate-800 text-center shadow-lg">
                                 <p class="text-xs text-emerald-400 font-bold">✓ ক্যামেরা সফলভাবে সংযুক্ত হয়েছে!</p>
-                                <p class="text-[11px] text-slate-400 mt-0.5">ভিডিও সরাসরি মাস্টার কন্ট্রোল রুমে পাঠানো হচ্ছে।</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">ভিডিও সরাসরি মাস্টার কনসোলে পাঠানো হচ্ছে।</p>
                             </div>
                         </div>
                     `;
@@ -583,7 +579,6 @@
             document.getElementById('connectedCount').innerText = `সংযুক্ত ক্যামেরা: ${activeCount}টি`;
         }
 
-        // View Mode Switcher (Single vs Multi-Cam Grid)
         function setViewMode(mode) {
             currentViewMode = mode;
             document.getElementById('btnViewSingle').className = mode === 'single' ? 'bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition' : 'text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg text-xs transition';
@@ -616,12 +611,10 @@
             statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
         }
 
-        // Canvas Multi-Grid Renderer
         function drawMultiCameraGrid() {
             mainCtx.fillStyle = "#020617";
             mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
 
-            // 4 Quadrants Coordinates (1280x720)
             const slots = [
                 { x: 0, y: 0, w: 640, h: 360, label: "CAM 1" },
                 { x: 640, y: 0, w: 640, h: 360, label: "CAM 2" },
@@ -642,7 +635,6 @@
                     mainCtx.fillText(`${slot.label} (নো সিগন্যাল)`, slot.x + slot.w / 2, slot.y + slot.h / 2);
                 }
 
-                // Grid Borders & Labels
                 mainCtx.strokeStyle = "#1e293b";
                 mainCtx.lineWidth = 2;
                 mainCtx.strokeRect(slot.x, slot.y, slot.w, slot.h);
@@ -703,7 +695,6 @@
             }
         }
 
-        // Google Drive Video Recorder
         function toggleDriveRecording() {
             if (!isRecording) {
                 startRecording();
@@ -791,7 +782,6 @@
             };
         }
 
-        // Replay & Analysis
         function trigger20sReview() {
             if (frameBuffer.length < 20) {
                 alert("ক্যামেরা অন করে কয়েক সেকেন্ড অপেক্ষা করুন যাতে বাফারে ফুটেজ জমা হয়।");
@@ -891,7 +881,6 @@
             if (isReviewing && isPlaying) startPlaybackEngine();
         }
 
-        // Coordinates & Drawing
         function getCoords(e) {
             const rect = mainCanvas.getBoundingClientRect();
             const scaleX = mainCanvas.width / rect.width;
@@ -965,7 +954,6 @@
 
         function clearLines() { lines = []; activeLine = null; }
 
-        // Animated TV Verdict Engine
         function triggerAnimatedVerdict(title, styleClass, detailText) {
             const suspense = document.getElementById('suspenseContainer');
             const card = document.getElementById('decisionCard');
@@ -1017,7 +1005,6 @@
             }
         }
 
-        // Match Clock & Scoreboard
         function formatTimer(sec) {
             const m = Math.floor(sec / 60);
             const s = sec % 60;
