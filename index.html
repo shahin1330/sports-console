@@ -435,7 +435,9 @@
         let lines = [];
         let activeLine = null;
 
-        let driveApiUrl = localStorage.getItem('drive_api_url') || "";
+        // আপনার নির্দিষ্ট Google Apps Script Web App URL সরাসরি ডিফল্ট হিসেবে যুক্ত করা হলো
+        const DEFAULT_DRIVE_API_URL = "https://script.google.com/macros/s/AKfycbwDGqV7E-3bCAxIH1MkDE76Ntc3e1t7qqpNwnvhLVl_q20tJZWu_FJB05JEm1ptAEgqcA/exec";
+        let driveApiUrl = localStorage.getItem('drive_api_url') || DEFAULT_DRIVE_API_URL;
 
         let mediaRecorder = null;
         let recordedChunks = [];
@@ -1138,7 +1140,7 @@
         }
 
         function saveScoreData() {
-            driveApiUrl = document.getElementById('inputDriveApiUrl').value.trim();
+            driveApiUrl = document.getElementById('inputDriveApiUrl').value.trim() || DEFAULT_DRIVE_API_URL;
             localStorage.setItem('drive_api_url', driveApiUrl);
 
             scoreState.teamA = document.getElementById('inputTeamA').value.trim() || scoreState.teamA;
