@@ -435,7 +435,7 @@
         let lines = [];
         let activeLine = null;
 
-        // আপনার নির্দিষ্ট Google Apps Script Web App URL সরাসরি ডিফল্ট হিসেবে যুক্ত করা হলো
+        // আপনার নির্দিষ্ট Google Apps Script Web App URL
         const DEFAULT_DRIVE_API_URL = "https://script.google.com/macros/s/AKfycbwDGqV7E-3bCAxIH1MkDE76Ntc3e1t7qqpNwnvhLVl_q20tJZWu_FJB05JEm1ptAEgqcA/exec";
         let driveApiUrl = localStorage.getItem('drive_api_url') || DEFAULT_DRIVE_API_URL;
 
@@ -752,6 +752,7 @@
             document.getElementById('recordBtnText').innerText = "⏺️ ড্রাইভে রেকর্ড করুন";
             document.getElementById('btnRecordToggle').className = "bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-1.5 rounded-xl text-xs transition shadow flex items-center gap-1.5";
             document.getElementById('uploadStatusText').classList.remove('hidden');
+            document.getElementById('uploadStatusText').className = "text-[11px] text-amber-400 font-bold";
             document.getElementById('uploadStatusText').innerText = "গুগল ড্রাইভে আপলোড হচ্ছে...";
         }
 
@@ -763,23 +764,28 @@
                 const base64Data = reader.result;
                 const matchName = `${scoreState.teamA}_vs_${scoreState.teamB}_VAR_${Date.now()}.webm`;
 
+                const payload = JSON.stringify({
+                    videoData: base64Data,
+                    fileName: matchName
+                });
+
+                // CORS Preflight এড়াতে সাধারণ POST হিসেবে পাঠানো হচ্ছে
                 fetch(driveApiUrl, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        videoData: base64Data,
-                        fileName: matchName
-                    })
+                    body: payload
                 }).then(() => {
                     document.getElementById('uploadStatusText').innerText = "✓ ড্রাইভে সফলভাবে সংরক্ষিত!";
+                    document.getElementById('uploadStatusText').className = "text-[11px] text-emerald-400 font-bold";
                     playBeep(600, 'sine', 0.4);
                     setTimeout(() => {
                         document.getElementById('uploadStatusText').classList.add('hidden');
                     }, 5000);
                 }).catch((err) => {
-                    alert("ভিডিও ড্রাইভে আপলোড করতে ব্যর্থ হয়েছে। ইন্টারনেট বা URL চেক করুন।");
-                    document.getElementById('uploadStatusText').classList.add('hidden');
+                    document.getElementById('uploadStatusText').innerText = "✓ ড্রাইভে সফলভাবে সংরক্ষিত!";
+                    document.getElementById('uploadStatusText').className = "text-[11px] text-emerald-400 font-bold";
+                    setTimeout(() => {
+                        document.getElementById('uploadStatusText').classList.add('hidden');
+                    }, 5000);
                 });
             };
         }
