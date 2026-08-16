@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sports Broadcast & VAR Console</title>
+    <title>Sports Broadcast, Multi-View VAR & Drive Recorder</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
@@ -37,10 +37,9 @@
             </div>
             <div>
                 <h2 class="text-xl md:text-2xl font-black text-white">লাইভ স্পোর্টস কনসোল</h2>
-                <p class="text-xs text-slate-400 mt-1">ক্রিকেট DRS ও ফুটবল VAR মাল্টি-ক্যামেরা সিস্টেম</p>
+                <p class="text-xs text-slate-400 mt-1">মাল্টি-ক্যাম স্প্লিট ভিউ ও ড্রাইভ রেকর্ডার</p>
             </div>
 
-            <!-- Permission Error Banner -->
             <div id="permissionNotice" class="hidden bg-amber-950/80 border border-amber-600/50 text-amber-300 p-3 rounded-xl text-xs text-left">
                 ⚠️ ক্যামেরা চালু করতে ব্রাউজারের পপ-আপ আসলে <strong>"Allow"</strong> নির্বাচন করুন।
             </div>
@@ -84,7 +83,7 @@
 
             <div class="flex items-center gap-2">
                 <button onclick="toggleScoreModal()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3.5 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold transition">
-                    ⚙️ স্কোর ও ম্যাচ এডিট
+                    ⚙️ সেটিংস ও স্কোর
                 </button>
             </div>
         </div>
@@ -96,7 +95,7 @@
             
             <!-- Master Video Screen -->
             <div class="relative bg-black rounded-3xl overflow-hidden border border-slate-800 aspect-video flex items-center justify-center shadow-2xl">
-                <canvas id="mainCanvas" class="w-full h-full object-contain cursor-grab active:cursor-grabbing canvas-interactive"></canvas>
+                <canvas id="mainCanvas" width="1280" height="720" class="w-full h-full object-contain cursor-grab active:cursor-grabbing canvas-interactive"></canvas>
 
                 <div id="statusTag" class="absolute top-4 left-4 bg-slate-800/90 backdrop-blur text-slate-400 px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow">
                     ক্যামেরার অপেক্ষায়...
@@ -104,6 +103,12 @@
 
                 <div id="activeAngleTag" class="absolute top-4 right-4 bg-slate-900/90 border border-slate-700 text-emerald-400 px-2.5 py-1 rounded text-xs font-mono font-bold">
                     CAM 1
+                </div>
+
+                <!-- Record Indicator Overlay -->
+                <div id="recBadge" class="hidden absolute top-4 left-32 bg-red-600/90 text-white px-2.5 py-1 rounded text-xs font-bold animate-pulse flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-white rounded-full"></span>
+                    <span id="recTimerText">REC 00:00</span>
                 </div>
 
                 <!-- Animated TV Broadcast Overlay -->
@@ -125,6 +130,28 @@
                             স্ক্রিন থেকে সরান ✕
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- View Mode Deck & Drive Recording Deck -->
+            <div class="bg-slate-900 border border-slate-800 p-3 rounded-2xl flex flex-wrap justify-between items-center gap-3 shadow-lg">
+                <!-- Display Mode Switcher -->
+                <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button id="btnViewSingle" onclick="setViewMode('single')" class="bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition">
+                        📹 ফোকাস ভিউ (সিঙ্গেল)
+                    </button>
+                    <button id="btnViewGrid" onclick="setViewMode('grid')" class="text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">
+                        🔲 গ্রিড ভিউ (সব ক্যামেরা একসাথে)
+                    </button>
+                </div>
+
+                <!-- Google Drive Video Recorder -->
+                <div class="flex items-center gap-2">
+                    <button id="btnRecordToggle" onclick="toggleDriveRecording()" class="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-1.5 rounded-xl text-xs transition shadow flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-white rounded-full"></span>
+                        <span id="recordBtnText">⏺️ ড্রাইভে রেকর্ড করুন</span>
+                    </button>
+                    <span id="uploadStatusText" class="text-[11px] text-amber-400 font-bold hidden">আপলোড হচ্ছে...</span>
                 </div>
             </div>
 
@@ -269,12 +296,18 @@
 
     </main>
 
-    <!-- Modal for Score & Config -->
+    <!-- Modal for Settings, Score & Google Script API -->
     <div id="scoreModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h3 class="text-base font-bold text-white">⚙️ কাস্টমাইজ স্কোর ও ম্যাচ তথ্য</h3>
+                <h3 class="text-base font-bold text-white">⚙️ সেটিংস ও ম্যাচ কনফিগারেশন</h3>
                 <button onclick="toggleScoreModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <!-- Drive API Endpoint Input -->
+            <div class="space-y-1 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <label class="text-xs text-amber-400 font-bold block">Google Apps Script Web App URL (ভিডিও ড্রাইভে রাখার লিংক):</label>
+                <input type="text" id="inputDriveApiUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-mono text-slate-200">
             </div>
 
             <div class="grid grid-cols-2 gap-4">
@@ -354,7 +387,6 @@
             } catch(e) {}
         }
 
-        // Camera helper with robust fallback
         async function getDeviceCameraStream() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error("ব্রাউজারে ক্যামেরা পারমিশন সক্রিয় নেই!");
@@ -385,6 +417,7 @@
         const MAX_CAMS = 5;
         let cameraStreams = [null, null, null, null, null];
         let activeCamIndex = 0;
+        let currentViewMode = 'single'; // 'single' অথবা 'grid'
 
         let isLiveActive = false;
         let isReviewing = false;
@@ -404,6 +437,16 @@
         let lines = [];
         let activeLine = null;
 
+        // Drive Web App API URL (সংরক্ষণ করে রাখবে)
+        let driveApiUrl = localStorage.getItem('drive_api_url') || "";
+
+        // Recording Engine State
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
+        let recordSeconds = 0;
+        let recordTimerInterval = null;
+
         let scoreState = {
             teamA: "BAN",
             teamB: "IND",
@@ -419,7 +462,6 @@
         let isTimerRunning = false;
         let matchTimerInterval = null;
 
-        // Master Control Room Init (No camera required on Host)
         async function initAsHost() {
             getAudioContext();
             roleSelector.classList.add('hidden');
@@ -437,7 +479,6 @@
             mainCtx.textAlign = "center";
             mainCtx.fillText("ক্যামেরা যুক্ত হওয়ার অপেক্ষায়...", 640, 360);
 
-            // Setup PeerJS for Multi-Camera Connection
             peer = new Peer(roomCode);
             peer.on('call', (call) => {
                 call.answer();
@@ -453,7 +494,6 @@
             if (!captureTimer) captureTimer = setInterval(captureFrames, 1000 / FPS);
         }
 
-        // Camera Node Init (Triggered from phone with Fullscreen Live Viewfinder)
         async function initAsCameraNode() {
             const targetRoom = document.getElementById('hostIdInput').value.trim().toUpperCase();
             if (!targetRoom) {
@@ -471,13 +511,10 @@
                 peer.on('open', () => {
                     peer.call(targetRoom, localStream);
 
-                    // ক্যামেরা ফোনে সরাসরি স্ক্রিনে লাইভ প্রিভিউ দেখানো
                     document.body.innerHTML = `
                         <div class="relative w-screen h-screen bg-black overflow-hidden flex flex-col justify-between p-4">
-                            <!-- লাইভ ভিউফাইন্ডার -->
                             <video id="localPreview" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover z-0"></video>
                             
-                            <!-- টপ স্ট্যাটাস বার -->
                             <div class="relative z-10 flex justify-between items-center bg-slate-950/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-800 shadow-lg">
                                 <div class="flex items-center gap-2">
                                     <span class="w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
@@ -488,10 +525,9 @@
                                 </span>
                             </div>
 
-                            <!-- বটম ওভারলে বার -->
                             <div class="relative z-10 bg-slate-950/80 backdrop-blur-md p-3.5 rounded-2xl border border-slate-800 text-center shadow-lg">
                                 <p class="text-xs text-emerald-400 font-bold">✓ ক্যামেরা সফলভাবে সংযুক্ত হয়েছে!</p>
-                                <p class="text-[11px] text-slate-400 mt-0.5">এই ডিভাইসের ভিডিও সরাসরি মাস্টার কন্ট্রোল রুমে পাঠানো হচ্ছে।</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">ভিডিও সরাসরি মাস্টার কন্ট্রোল রুমে পাঠানো হচ্ছে।</p>
                             </div>
                         </div>
                     `;
@@ -513,27 +549,22 @@
             }
         }
 
-        // Attach Camera Stream to Deck
         function attachCameraStream(index, stream) {
             cameraStreams[index] = stream;
             const videoEl = document.getElementById(`remoteCam${index}`);
             videoEl.srcObject = stream;
             videoEl.onloadedmetadata = () => {
                 videoEl.play();
-                if (index === activeCamIndex) {
-                    mainCanvas.width = videoEl.videoWidth || 1280;
-                    mainCanvas.height = videoEl.videoHeight || 720;
-                    isLiveActive = true;
-                    statusTag.innerText = "LIVE";
-                    statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
-                    requestAnimationFrame(renderLoop);
-                }
+                isLiveActive = true;
+                statusTag.innerText = "LIVE";
+                statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
+                requestAnimationFrame(renderLoop);
             };
 
             const btn = document.getElementById(`camBtn${index}`);
             btn.classList.remove('opacity-50', 'cursor-not-allowed');
             btn.innerText = `📹 CAM ${index + 1} (লাইভ)`;
-            if (index === activeCamIndex) {
+            if (index === activeCamIndex && currentViewMode === 'single') {
                 btn.className = "bg-emerald-600 text-slate-950 font-black py-2 rounded-xl text-xs border border-emerald-400";
             }
             updateConnectedCount();
@@ -552,16 +583,26 @@
             document.getElementById('connectedCount').innerText = `সংযুক্ত ক্যামেরা: ${activeCount}টি`;
         }
 
-        // Angle Switcher
+        // View Mode Switcher (Single vs Multi-Cam Grid)
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            document.getElementById('btnViewSingle').className = mode === 'single' ? 'bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition' : 'text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg text-xs transition';
+            document.getElementById('btnViewGrid').className = mode === 'grid' ? 'bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition' : 'text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg text-xs transition';
+            
+            document.getElementById('activeAngleTag').innerText = mode === 'grid' ? 'ALL CAMS (GRID)' : `CAM ${activeCamIndex + 1}`;
+            frameBuffer = [];
+        }
+
         function switchActiveCamera(index) {
             if (!cameraStreams[index]) return;
-
             activeCamIndex = index;
-            document.getElementById('activeAngleTag').innerText = `CAM ${index + 1}`;
+            if (currentViewMode === 'single') {
+                document.getElementById('activeAngleTag').innerText = `CAM ${index + 1}`;
+            }
 
             for (let i = 0; i < MAX_CAMS; i++) {
                 const btn = document.getElementById(`camBtn${i}`);
-                if (i === index) {
+                if (i === index && currentViewMode === 'single') {
                     btn.className = "bg-emerald-600 text-slate-950 font-black py-2 rounded-xl text-xs border border-emerald-400";
                 } else if (cameraStreams[i]) {
                     btn.className = "bg-slate-800 text-slate-200 font-bold py-2 rounded-xl text-xs border border-slate-700 hover:bg-slate-700";
@@ -575,35 +616,80 @@
             statusTag.className = "absolute top-4 left-4 bg-emerald-600/90 backdrop-blur text-white px-3 py-1 rounded-md font-black text-xs uppercase tracking-wider shadow";
         }
 
-        // Memory Buffer & Rendering Loop
+        // Canvas Multi-Grid Renderer
+        function drawMultiCameraGrid() {
+            mainCtx.fillStyle = "#020617";
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+            // 4 Quadrants Coordinates (1280x720)
+            const slots = [
+                { x: 0, y: 0, w: 640, h: 360, label: "CAM 1" },
+                { x: 640, y: 0, w: 640, h: 360, label: "CAM 2" },
+                { x: 0, y: 360, w: 640, h: 360, label: "CAM 3" },
+                { x: 640, y: 360, w: 640, h: 360, label: "CAM 4" }
+            ];
+
+            slots.forEach((slot, idx) => {
+                const vid = document.getElementById(`remoteCam${idx}`);
+                if (vid && cameraStreams[idx] && vid.videoWidth > 0) {
+                    mainCtx.drawImage(vid, slot.x, slot.y, slot.w, slot.h);
+                } else {
+                    mainCtx.fillStyle = "#0f172a";
+                    mainCtx.fillRect(slot.x, slot.y, slot.w, slot.h);
+                    mainCtx.fillStyle = "#475569";
+                    mainCtx.font = "bold 16px sans-serif";
+                    mainCtx.textAlign = "center";
+                    mainCtx.fillText(`${slot.label} (নো সিগন্যাল)`, slot.x + slot.w / 2, slot.y + slot.h / 2);
+                }
+
+                // Grid Borders & Labels
+                mainCtx.strokeStyle = "#1e293b";
+                mainCtx.lineWidth = 2;
+                mainCtx.strokeRect(slot.x, slot.y, slot.w, slot.h);
+
+                mainCtx.fillStyle = "rgba(15, 23, 42, 0.85)";
+                mainCtx.fillRect(slot.x + 8, slot.y + 8, 80, 24);
+                mainCtx.fillStyle = "#10b981";
+                mainCtx.font = "bold 11px sans-serif";
+                mainCtx.textAlign = "center";
+                mainCtx.fillText(slot.label, slot.x + 48, slot.y + 24);
+            });
+        }
+
         function captureFrames() {
-            const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
-            if (!activeVideo || activeVideo.paused || activeVideo.ended || activeVideo.videoWidth === 0) return;
+            if (currentViewMode === 'single') {
+                const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
+                if (!activeVideo || activeVideo.paused || activeVideo.ended || activeVideo.videoWidth === 0) return;
 
-            createImageBitmap(activeVideo).then(bmp => {
-                frameBuffer.push(bmp);
-                if (frameBuffer.length > MAX_FRAMES) {
-                    const old = frameBuffer.shift();
-                    old.close();
-                }
+                createImageBitmap(activeVideo).then(bmp => {
+                    frameBuffer.push(bmp);
+                    if (frameBuffer.length > MAX_FRAMES) {
+                        const old = frameBuffer.shift();
+                        old.close();
+                    }
+                    timelineSlider.max = frameBuffer.length - 1;
+                    bufferStartLabel.innerText = `বাফার (-${(frameBuffer.length / FPS).toFixed(0)} সে.)`;
 
-                timelineSlider.max = frameBuffer.length - 1;
-                bufferStartLabel.innerText = `বাফার (-${(frameBuffer.length / FPS).toFixed(0)} সে.)`;
-
-                if (!isReviewing) {
-                    viewIndex = frameBuffer.length - 1;
-                    timelineSlider.value = viewIndex;
-                }
-            }).catch(() => {});
+                    if (!isReviewing) {
+                        viewIndex = frameBuffer.length - 1;
+                        timelineSlider.value = viewIndex;
+                    }
+                }).catch(() => {});
+            }
         }
 
         function renderLoop() {
-            const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
             if (!isReviewing) {
-                if (activeVideo && activeVideo.videoWidth > 0) {
-                    mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-                    mainCtx.drawImage(activeVideo, 0, 0, mainCanvas.width, mainCanvas.height);
+                if (currentViewMode === 'grid') {
+                    drawMultiCameraGrid();
                     renderLines();
+                } else {
+                    const activeVideo = document.getElementById(`remoteCam${activeCamIndex}`);
+                    if (activeVideo && activeVideo.videoWidth > 0) {
+                        mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                        mainCtx.drawImage(activeVideo, 0, 0, mainCanvas.width, mainCanvas.height);
+                        renderLines();
+                    }
                 }
             } else {
                 if (frameBuffer[viewIndex]) {
@@ -617,7 +703,95 @@
             }
         }
 
-        // 20s Instant Replay
+        // Google Drive Video Recorder
+        function toggleDriveRecording() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecordingAndUpload();
+            }
+        }
+
+        function startRecording() {
+            if (!driveApiUrl) {
+                alert("দয়া করে 'সেটিংস ও স্কোর' মেনুতে গিয়ে আপনার Google Apps Script Web App URL দিন!");
+                toggleScoreModal();
+                return;
+            }
+
+            recordedChunks = [];
+            const stream = mainCanvas.captureStream(25);
+            try {
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            } catch (e) {
+                mediaRecorder = new MediaRecorder(stream);
+            }
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = uploadToGoogleDrive;
+            mediaRecorder.start();
+
+            isRecording = true;
+            recordSeconds = 0;
+            document.getElementById('recordBtnText').innerText = "⏹️ থামান ও ড্রাইভে সেভ করুন";
+            document.getElementById('btnRecordToggle').className = "bg-amber-600 hover:bg-amber-500 text-slate-950 font-black px-4 py-1.5 rounded-xl text-xs transition shadow animate-pulse flex items-center gap-1.5";
+            document.getElementById('recBadge').classList.remove('hidden');
+
+            clearInterval(recordTimerInterval);
+            recordTimerInterval = setInterval(() => {
+                recordSeconds++;
+                const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+                const s = String(recordSeconds % 60).padStart(2, '0');
+                document.getElementById('recTimerText').innerText = `REC ${m}:${s}`;
+            }, 1000);
+        }
+
+        function stopRecordingAndUpload() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+            mediaRecorder.stop();
+            isRecording = false;
+            clearInterval(recordTimerInterval);
+
+            document.getElementById('recBadge').classList.add('hidden');
+            document.getElementById('recordBtnText').innerText = "⏺️ ড্রাইভে রেকর্ড করুন";
+            document.getElementById('btnRecordToggle').className = "bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-1.5 rounded-xl text-xs transition shadow flex items-center gap-1.5";
+            document.getElementById('uploadStatusText').classList.remove('hidden');
+            document.getElementById('uploadStatusText').innerText = "গুগল ড্রাইভে আপলোড হচ্ছে...";
+        }
+
+        function uploadToGoogleDrive() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                const base64Data = reader.result;
+                const matchName = `${scoreState.teamA}_vs_${scoreState.teamB}_VAR_${Date.now()}.webm`;
+
+                fetch(driveApiUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        videoData: base64Data,
+                        fileName: matchName
+                    })
+                }).then(() => {
+                    document.getElementById('uploadStatusText').innerText = "✓ ড্রাইভে সফলভাবে সংরক্ষিত!";
+                    playBeep(600, 'sine', 0.4);
+                    setTimeout(() => {
+                        document.getElementById('uploadStatusText').classList.add('hidden');
+                    }, 5000);
+                }).catch((err) => {
+                    alert("ভিডিও ড্রাইভে আপলোড করতে ব্যর্থ হয়েছে। ইন্টারনেট বা URL চেক করুন।");
+                    document.getElementById('uploadStatusText').classList.add('hidden');
+                });
+            };
+        }
+
+        // Replay & Analysis
         function trigger20sReview() {
             if (frameBuffer.length < 20) {
                 alert("ক্যামেরা অন করে কয়েক সেকেন্ড অপেক্ষা করুন যাতে বাফারে ফুটেজ জমা হয়।");
@@ -791,7 +965,7 @@
 
         function clearLines() { lines = []; activeLine = null; }
 
-        // TV Overlay Engine
+        // Animated TV Verdict Engine
         function triggerAnimatedVerdict(title, styleClass, detailText) {
             const suspense = document.getElementById('suspenseContainer');
             const card = document.getElementById('decisionCard');
@@ -965,6 +1139,7 @@
             const m = document.getElementById('scoreModal');
             m.classList.toggle('hidden');
             if (!m.classList.contains('hidden')) {
+                document.getElementById('inputDriveApiUrl').value = driveApiUrl;
                 document.getElementById('inputTeamA').value = scoreState.teamA;
                 document.getElementById('inputTeamB').value = scoreState.teamB;
                 document.getElementById('inputRuns').value = scoreState.runs;
@@ -976,6 +1151,9 @@
         }
 
         function saveScoreData() {
+            driveApiUrl = document.getElementById('inputDriveApiUrl').value.trim();
+            localStorage.setItem('drive_api_url', driveApiUrl);
+
             scoreState.teamA = document.getElementById('inputTeamA').value.trim() || scoreState.teamA;
             scoreState.teamB = document.getElementById('inputTeamB').value.trim() || scoreState.teamB;
             scoreState.runs = parseInt(document.getElementById('inputRuns').value) || 0;
